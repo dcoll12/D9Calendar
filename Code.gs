@@ -33,18 +33,20 @@ var CONFIG = {
    */
   columns: {
     timestamp:   "Timestamp",
-    name:        "Name",
     email:       "Email Address",
-    phone:       "Phone Number",
-    address:     "Address",
-    date:        "Date",
-    startTime:   "Start Time",
-    endTime:     "End Time",
-    jobTitle:    "Job / Service",
-    description: "Description",
-    equipment:   "Equipment Needed",
-    notes:       "Special Notes",
-    extra:       "Additional Info"
+    name:        "Contact Name",
+    contactEmail:"Contact Email",
+    phone:       "Contact Phone number",
+    address:     "Event Location - Title and Address",
+    startTime:   "Event Start Time",
+    details:     "Event Details",
+    ticketed:    "Ticketed? ",
+    ticketInfo:  "If ticketed provide price information & link",
+    notes:       "Other Comments",
+    date:        "Event Date",
+    endTime:     "Event End Time",
+    eventLink:   "Event Link",
+    description: "Event Description"
   }
 };
 
@@ -160,23 +162,24 @@ function createCalendarEvent(data) {
 }
 
 function buildEventTitle(data) {
-  var parts = [];
-  if (data.jobTitle) parts.push(data.jobTitle);
-  if (data.name)     parts.push("- " + data.name);
-  return parts.length ? parts.join(" ") : "New Appointment";
+  if (data.description) return data.description;
+  if (data.name)        return data.name;
+  return "New Event";
 }
 
 function buildEventDescription(data) {
   var lines = [];
-  if (data.name)        lines.push("Name:             " + data.name);
-  if (data.email)       lines.push("Email:            " + data.email);
-  if (data.phone)       lines.push("Phone:            " + data.phone);
-  if (data.address)     lines.push("Address:          " + data.address);
-  if (data.jobTitle)    lines.push("Job / Service:    " + data.jobTitle);
-  if (data.description) lines.push("Description:      " + data.description);
-  if (data.equipment)   lines.push("Equipment Needed: " + data.equipment);
-  if (data.notes)       lines.push("Special Notes:    " + data.notes);
-  if (data.extra)       lines.push("Additional Info:  " + data.extra);
+  if (data.name)         lines.push("Contact Name:    " + data.name);
+  if (data.contactEmail) lines.push("Contact Email:   " + data.contactEmail);
+  if (data.email)        lines.push("Submitter Email: " + data.email);
+  if (data.phone)        lines.push("Phone:           " + data.phone);
+  if (data.address)      lines.push("Location:        " + data.address);
+  if (data.details)      lines.push("Event Details:   " + data.details);
+  if (data.description)  lines.push("Description:     " + data.description);
+  if (data.ticketed)     lines.push("Ticketed:        " + data.ticketed);
+  if (data.ticketInfo)   lines.push("Ticket Info:     " + data.ticketInfo);
+  if (data.eventLink)    lines.push("Event Link:      " + data.eventLink);
+  if (data.notes)        lines.push("Other Comments:  " + data.notes);
   lines.push("");
   lines.push("Submitted: " + (data.timestamp || new Date().toLocaleString()));
   return lines.join("\n");
@@ -245,7 +248,7 @@ function sendConfirmation(data, event) {
     "",
     "  Date & Time:   " + startStr + " to " + endStr,
     "  Location:      " + (data.address || "N/A"),
-    "  Service:       " + (data.jobTitle || "N/A"),
+    "  Event Link:    " + (data.eventLink || "N/A"),
     "",
     "A calendar invite has been sent to this address.",
     "Reply to this email with any questions.",
