@@ -1,59 +1,58 @@
 /**
- * D9 Calendar - Google Form to Google Calendar Integration
+ * D9 Calendar – Google Sheet (Form Responses) → Google Calendar
  *
- * This script listens for form submissions and automatically creates
- * calendar events based on the submitted data.
+ * Attach this script to your Form Responses Google Sheet:
+ *   Sheet → Extensions → Apps Script → paste this code → Save
  *
- * Setup:
- *   1. Open your Google Form → Extensions → Apps Script
- *   2. Paste this code replacing any existing content
- *   3. Run installTrigger() once to set up the form submit trigger
- *   4. Grant the required permissions when prompted
+ * Then run installTrigger() ONCE to activate automatic event creation.
  */
 
 // ─── CONFIGURATION ────────────────────────────────────────────────────────────
 
 var CONFIG = {
-  // Target Google Calendar ID
+  // Google Calendar ID to add events to
   calendarId: "be1ac89bbe6867d17b30c19680c17dabe0d9c18d4f14b05a69a647998df079c6@group.calendar.google.com",
 
-  // Default event duration in minutes (used if end time is missing)
+  // Default duration in minutes when no End Time column exists
   defaultDurationMinutes: 60,
 
-  // Set to true to send an email confirmation to the submitter
+  // Send a confirmation email to the submitter after booking
   sendConfirmationEmail: true,
-
-  // Email subject prefix for confirmations
   confirmationEmailSubject: "Appointment Confirmed – D9 Calendar",
-
-  // Name of the person / org shown in confirmation emails
   organizationName: "D9",
 
-  // Form field titles – update these to exactly match your form question text
-  fields: {
-    name:        "Name",          // entry.2005620554
-    email:       "Email",         // entry.1045781291
-    phone:       "Phone Number",  // entry.1166974658
-    address:     "Address",       // entry.1065046570
-    date:        "Date",          // entry.1740888052  (YYYY-MM-DD)
-    startTime:   "Start Time",    // entry.1388854476  (HH:MM, 24-hr)
-    endTime:     "End Time",      // entry.1473712924  (HH:MM, 24-hr)
-    jobTitle:    "Job / Service", // entry.1587085788
-    description: "Description",   // entry.323554986
-    equipment:   "Equipment Needed", // entry.439887738
-    notes:       "Special Notes", // entry.533019475
-    extra:       "Additional Info" // entry.839337160
+  /**
+   * Map each key to the EXACT column header in your Google Sheet.
+   * Run debugSheetHeaders() to see all your column names printed in the log.
+   *
+   * Required: date, startTime
+   * Optional: everything else (script handles missing columns gracefully)
+   */
+  columns: {
+    timestamp:   "Timestamp",
+    name:        "Name",
+    email:       "Email Address",
+    phone:       "Phone Number",
+    address:     "Address",
+    date:        "Date",
+    startTime:   "Start Time",
+    endTime:     "End Time",
+    jobTitle:    "Job / Service",
+    description: "Description",
+    equipment:   "Equipment Needed",
+    notes:       "Special Notes",
+    extra:       "Additional Info"
   }
 };
 
 // ─── TRIGGER SETUP ────────────────────────────────────────────────────────────
 
 /**
- * Run this function ONCE manually from the Apps Script editor to install
- * the onFormSubmit trigger.  After that it runs automatically.
+ * Run this ONCE from the Apps Script editor (▶ Run button).
+ * It installs the onFormSubmit trigger on this spreadsheet.
  */
 function installTrigger() {
-  // Remove any existing triggers to avoid duplicates
+  // Remove existing onFormSubmit triggers to avoid duplicates
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "onFormSubmit") {
       ScriptApp.deleteTrigger(t);
@@ -61,100 +60,90 @@ function installTrigger() {
   });
 
   ScriptApp.newTrigger("onFormSubmit")
-    .forForm(FormApp.getActiveForm())
+    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
     .onFormSubmit()
     .create();
 
-  Logger.log("✅ Trigger installed successfully.");
+  Logger.log("Trigger installed. onFormSubmit will now fire on every new form response.");
 }
 
 // ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
 
 /**
- * Triggered automatically every time the form is submitted.
- * @param {Object} e - The form submit event object.
+ * Fires automatically when a new form response is added to the sheet.
+ * @param {GoogleAppsScript.Events.SheetsOnFormSubmit} e
  */
 function onFormSubmit(e) {
   try {
-    var data = parseFormResponse(e.response);
-    Logger.log("Parsed response: " + JSON.stringify(data));
+    var data = parseNamedValues(e.namedValues);
+    Logger.log("Form data: " + JSON.stringify(data));
 
     var event = createCalendarEvent(data);
-    Logger.log("Event created: " + event.getId());
+    Logger.log("Calendar event created: " + event.getTitle() + " (" + event.getId() + ")");
 
     if (CONFIG.sendConfirmationEmail && data.email) {
       sendConfirmation(data, event);
     }
   } catch (err) {
-    Logger.log("ERROR in onFormSubmit: " + err.message);
+    Logger.log("ERROR: " + err.message + "\n" + err.stack);
     notifyAdminOfError(err, e);
   }
 }
 
-// ─── FORM PARSING ─────────────────────────────────────────────────────────────
+// ─── SHEET PARSING ────────────────────────────────────────────────────────────
 
 /**
- * Converts a FormResponse into a plain object using the field titles
- * defined in CONFIG.fields.  Falls back to entry order when titles don't
- * match so the script degrades gracefully.
+ * Converts e.namedValues ({"Column": ["value"], ...}) to a flat data object
+ * using the column mappings in CONFIG.columns.
  *
- * @param {FormApp.FormResponse} response
- * @returns {Object} Flat map of field keys → answer strings
+ * @param {Object} namedValues - The namedValues from the form submit event.
+ * @returns {Object}
  */
-function parseFormResponse(response) {
+function parseNamedValues(namedValues) {
   var data = {};
-  var itemResponses = response.getItemResponses();
+  var cols = CONFIG.columns;
 
-  // Build a map of { "Question Title" : "Answer" }
-  var byTitle = {};
-  itemResponses.forEach(function (ir) {
-    byTitle[ir.getItem().getTitle()] = ir.getResponse();
+  Object.keys(cols).forEach(function (key) {
+    var colName = cols[key];
+    var arr = namedValues[colName];
+    data[key] = (arr && arr[0]) ? arr[0].toString().trim() : "";
   });
 
-  // Map known titles to friendly keys
-  var fields = CONFIG.fields;
-  Object.keys(fields).forEach(function (key) {
-    var title = fields[key];
-    data[key] = byTitle[title] || "";
-  });
-
-  // Store raw map for debugging / unknown fields
-  data._raw = byTitle;
-
+  // Also keep the raw map so we can log it for debugging
+  data._raw = namedValues;
   return data;
 }
 
 // ─── CALENDAR EVENT CREATION ──────────────────────────────────────────────────
 
 /**
- * Creates a Google Calendar event from the parsed form data.
- *
- * @param {Object} data - Parsed form data.
+ * Creates a Google Calendar event from the parsed row data.
+ * @param {Object} data
  * @returns {CalendarApp.CalendarEvent}
  */
 function createCalendarEvent(data) {
   var calendar = CalendarApp.getCalendarById(CONFIG.calendarId);
   if (!calendar) {
-    throw new Error("Calendar not found: " + CONFIG.calendarId +
-      ". Make sure you have access to this calendar.");
+    throw new Error(
+      "Calendar not found: " + CONFIG.calendarId + "\n" +
+      "Make sure the account running this script has 'Make changes to events' " +
+      "permission on that calendar."
+    );
   }
 
   var startDate = buildDate(data.date, data.startTime);
-  var endDate   = data.endTime
+  var endDate = data.endTime
     ? buildDate(data.date, data.endTime)
     : new Date(startDate.getTime() + CONFIG.defaultDurationMinutes * 60000);
 
   var title       = buildEventTitle(data);
   var description = buildEventDescription(data);
 
-  var options = {
+  var event = calendar.createEvent(title, startDate, endDate, {
     description: description,
     location:    data.address || ""
-  };
+  });
 
-  var event = calendar.createEvent(title, startDate, endDate, options);
-
-  // Add the submitter as a guest so they receive a calendar invite
   if (data.email) {
     event.addGuest(data.email);
   }
@@ -162,143 +151,154 @@ function createCalendarEvent(data) {
   return event;
 }
 
-/**
- * Builds the event title.  Customize as needed.
- */
 function buildEventTitle(data) {
   var parts = [];
   if (data.jobTitle) parts.push(data.jobTitle);
-  if (data.name)     parts.push("– " + data.name);
+  if (data.name)     parts.push("- " + data.name);
   return parts.length ? parts.join(" ") : "New Appointment";
 }
 
-/**
- * Builds the event description from all known fields.
- */
 function buildEventDescription(data) {
   var lines = [];
-
-  if (data.name)        lines.push("Name:              " + data.name);
-  if (data.email)       lines.push("Email:             " + data.email);
-  if (data.phone)       lines.push("Phone:             " + data.phone);
-  if (data.address)     lines.push("Address:           " + data.address);
-  if (data.jobTitle)    lines.push("Job / Service:     " + data.jobTitle);
-  if (data.description) lines.push("Description:       " + data.description);
-  if (data.equipment)   lines.push("Equipment Needed:  " + data.equipment);
-  if (data.notes)       lines.push("Special Notes:     " + data.notes);
-  if (data.extra)       lines.push("Additional Info:   " + data.extra);
-
+  if (data.name)        lines.push("Name:             " + data.name);
+  if (data.email)       lines.push("Email:            " + data.email);
+  if (data.phone)       lines.push("Phone:            " + data.phone);
+  if (data.address)     lines.push("Address:          " + data.address);
+  if (data.jobTitle)    lines.push("Job / Service:    " + data.jobTitle);
+  if (data.description) lines.push("Description:      " + data.description);
+  if (data.equipment)   lines.push("Equipment Needed: " + data.equipment);
+  if (data.notes)       lines.push("Special Notes:    " + data.notes);
+  if (data.extra)       lines.push("Additional Info:  " + data.extra);
   lines.push("");
-  lines.push("Submitted via Google Form on " + new Date().toLocaleString());
-
+  lines.push("Submitted: " + (data.timestamp || new Date().toLocaleString()));
   return lines.join("\n");
 }
 
 // ─── DATE / TIME HELPERS ──────────────────────────────────────────────────────
 
 /**
- * Combines a date string (YYYY-MM-DD) and time string (HH:MM) into a Date.
- * Handles both 24-hour and 12-hour (AM/PM) time formats.
+ * Parses a date + time into a JS Date.
  *
- * @param {string} dateStr  e.g. "2026-03-11"
- * @param {string} timeStr  e.g. "15:00" or "3:00 PM"
+ * Supported date formats: "2026-03-11", "03/11/2026", "March 11, 2026"
+ * Supported time formats: "15:00", "3:00 PM", "3 PM"
+ *
+ * @param {string} dateStr
+ * @param {string} timeStr
  * @returns {Date}
  */
 function buildDate(dateStr, timeStr) {
-  if (!dateStr) throw new Error("Date is required but was empty.");
+  if (!dateStr) throw new Error("Date field is empty. Check that CONFIG.columns.date matches your sheet header.");
 
-  var dateParts = dateStr.split("-");
-  var year  = parseInt(dateParts[0], 10);
-  var month = parseInt(dateParts[1], 10) - 1; // JS months are 0-indexed
-  var day   = parseInt(dateParts[2], 10);
+  var date;
 
-  var hours   = 0;
-  var minutes = 0;
+  // Try ISO format YYYY-MM-DD first
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    var dp = dateStr.substring(0, 10).split("-");
+    date = new Date(parseInt(dp[0]), parseInt(dp[1]) - 1, parseInt(dp[2]));
+  } else {
+    // Fall back to JS Date parser for other formats (MM/DD/YYYY, "March 11, 2026", etc.)
+    date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      throw new Error("Could not parse date: '" + dateStr + "'");
+    }
+    // Reset time portion
+    date = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
 
+  // Parse time
+  var hours = 0, minutes = 0;
   if (timeStr) {
-    // Normalize: remove extra spaces, handle AM/PM
     var t = timeStr.trim().toUpperCase();
     var isPM = t.indexOf("PM") !== -1;
     var isAM = t.indexOf("AM") !== -1;
-    t = t.replace(/AM|PM/g, "").trim();
+    t = t.replace(/[APM\s]/g, "");
 
-    var timeParts = t.split(":");
-    hours   = parseInt(timeParts[0], 10);
-    minutes = parseInt(timeParts[1] || "0", 10);
+    var tp = t.split(":");
+    hours   = parseInt(tp[0], 10) || 0;
+    minutes = parseInt(tp[1] || "0", 10) || 0;
 
     if (isPM && hours < 12) hours += 12;
     if (isAM && hours === 12) hours = 0;
   }
 
-  return new Date(year, month, day, hours, minutes, 0);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, 0);
 }
 
 // ─── EMAIL CONFIRMATION ───────────────────────────────────────────────────────
 
-/**
- * Sends a confirmation email to the person who submitted the form.
- *
- * @param {Object} data               - Parsed form data.
- * @param {CalendarApp.CalendarEvent} event - The created calendar event.
- */
 function sendConfirmation(data, event) {
-  var subject = CONFIG.confirmationEmailSubject;
-
   var startStr = event.getStartTime().toLocaleString();
   var endStr   = event.getEndTime().toLocaleString();
 
   var body = [
     "Hi " + (data.name || "there") + ",",
     "",
-    "Thank you for submitting your request. Here are the details of your appointment:",
+    "Your appointment has been confirmed. Here are the details:",
     "",
-    "  Date & Time:   " + startStr + " – " + endStr,
+    "  Date & Time:   " + startStr + " to " + endStr,
     "  Location:      " + (data.address || "N/A"),
-    "  Job / Service: " + (data.jobTitle || "N/A"),
+    "  Service:       " + (data.jobTitle || "N/A"),
     "",
-    "A calendar invite has been sent to this address. If you have any questions,",
-    "feel free to reply to this email.",
+    "A calendar invite has been sent to this address.",
+    "Reply to this email with any questions.",
     "",
     "Thanks,",
     CONFIG.organizationName
   ].join("\n");
 
-  MailApp.sendEmail({
-    to:      data.email,
-    subject: subject,
-    body:    body
-  });
-
+  MailApp.sendEmail({ to: data.email, subject: CONFIG.confirmationEmailSubject, body: body });
   Logger.log("Confirmation email sent to " + data.email);
 }
 
-// ─── ERROR NOTIFICATION ───────────────────────────────────────────────────────
-
-/**
- * Emails the script owner when an unhandled error occurs.
- *
- * @param {Error}  err - The caught error.
- * @param {Object} e   - The original form submit event.
- */
 function notifyAdminOfError(err, e) {
   var owner = Session.getEffectiveUser().getEmail();
   MailApp.sendEmail({
     to:      owner,
     subject: "[D9 Calendar] Form submission error",
-    body:    "An error occurred while processing a form submission.\n\n" +
-             "Error: " + err.message + "\n\n" +
-             "Stack: " + err.stack + "\n\n" +
-             "Event object: " + JSON.stringify(e)
+    body:    "Error: " + err.message + "\n\nStack: " + err.stack +
+             "\n\nRaw event:\n" + JSON.stringify(e, null, 2)
   });
 }
 
-// ─── UTILITY / TEST ───────────────────────────────────────────────────────────
+// ─── DEBUG / TEST UTILITIES ───────────────────────────────────────────────────
 
 /**
- * Run this from the Apps Script editor to test event creation without
- * submitting a real form response.
+ * STEP 1: Run this first.
+ * Prints every column header in your sheet so you can match them to CONFIG.columns.
  */
-function testCreateEvent() {
+function debugSheetHeaders() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  Logger.log("=== Sheet Column Headers ===");
+  headers.forEach(function (h, i) {
+    Logger.log("Column " + (i + 1) + ": \"" + h + "\"");
+  });
+  Logger.log("=== Update CONFIG.columns to match these exactly ===");
+}
+
+/**
+ * STEP 2: Run this to simulate a form submission using the last row of the sheet.
+ * Useful for testing without submitting the form again.
+ */
+function testWithLastRow() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var lastRow = sheet.getRange(sheet.getLastRow(), 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  // Build a namedValues object identical to what e.namedValues would contain
+  var namedValues = {};
+  headers.forEach(function (h, i) {
+    namedValues[h] = [lastRow[i] !== undefined ? lastRow[i].toString() : ""];
+  });
+
+  Logger.log("Simulating submission with: " + JSON.stringify(namedValues));
+  onFormSubmit({ namedValues: namedValues });
+}
+
+/**
+ * STEP 3 (optional): Create a test event with hardcoded data to verify calendar access.
+ */
+function testCalendarAccess() {
   var fakeData = {
     name:        "Darian",
     email:       "darianroark18@gmail.com",
@@ -308,30 +308,12 @@ function testCreateEvent() {
     startTime:   "15:00",
     endTime:     "16:00",
     jobTitle:    "Test Job",
-    description: "Test description",
+    description: "Testing calendar access",
     equipment:   "No",
     notes:       "Test notes",
-    extra:       "Test extra info"
+    extra:       ""
   };
 
   var event = createCalendarEvent(fakeData);
-  Logger.log("Test event created: " + event.getTitle() + " | " + event.getId());
-}
-
-/**
- * Lists recent form responses in the Logger – useful for verifying field titles.
- */
-function debugFormFields() {
-  var form      = FormApp.getActiveForm();
-  var responses = form.getResponses();
-
-  if (responses.length === 0) {
-    Logger.log("No responses yet.");
-    return;
-  }
-
-  var latest = responses[responses.length - 1];
-  latest.getItemResponses().forEach(function (ir) {
-    Logger.log(ir.getItem().getTitle() + " → " + ir.getResponse());
-  });
+  Logger.log("SUCCESS: Test event created → " + event.getTitle() + " on " + event.getStartTime());
 }

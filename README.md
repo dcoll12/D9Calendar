@@ -1,45 +1,50 @@
 # D9 Calendar – Google Form → Google Calendar Integration
 
-Automatically creates a Google Calendar event every time your Google Form is submitted.
+Automatically creates a Google Calendar event every time your Google Form is submitted, using the Form Responses Google Sheet as the trigger point.
 
 ---
 
-## How It Works
+## Setup (10 minutes, one-time)
 
-```
-User submits form → Apps Script trigger fires → Event created on calendar → Confirmation email sent
-```
+### Step 1 – Open Apps Script from the Response Sheet
 
----
+1. Open your Form Responses sheet:
+   **https://docs.google.com/spreadsheets/d/11y0aSk25N4ZWl1MZ3dgwWgTX-imHV34b0cCYaeQb4X8/edit**
+2. Click **Extensions → Apps Script**
+3. You'll see a default `Code.gs` file
 
-## One-Time Setup (5 minutes)
+### Step 2 – Paste the Script
 
-### Step 1 – Open Apps Script from your Form
-
-1. Open your Google Form: https://docs.google.com/forms/d/e/1FAIpQLSe-24aa0rfr0ObiDeiAn5TIivzObkJthbbbsRYta_9XHEoMaQ/viewform
-2. Click **⋮ More options** (top-right) → **Script editor**
-   *(Or: Extensions → Apps Script)*
-
-### Step 2 – Paste the Code
-
-1. Delete everything in the default `Code.gs` file
+1. Select all the text in `Code.gs` and delete it
 2. Copy the entire contents of `Code.gs` from this repo and paste it in
-3. Click **Project Settings** (⚙️ gear icon, left sidebar)
-4. Check **"Show 'appsscript.json' manifest file in editor"**
-5. Open `appsscript.json` in the editor and replace its contents with the `appsscript.json` from this repo
+3. Click **Save** (💾 icon or Ctrl+S)
 
-### Step 3 – Match Field Titles
+### Step 3 – Match Your Column Headers
 
-Open `Code.gs` and find the `CONFIG.fields` block:
+This is the most important step. The script needs column names that exactly match your sheet.
+
+1. In the Apps Script editor, select **`debugSheetHeaders`** from the function dropdown
+2. Click **▶ Run** (approve permissions if prompted)
+3. Click **Execution log** at the bottom — you'll see output like:
+
+```
+Column 1: "Timestamp"
+Column 2: "Name"
+Column 3: "Email Address"
+...
+```
+
+4. Open `Code.gs` and find the `CONFIG.columns` block:
 
 ```js
-fields: {
+columns: {
+  timestamp:   "Timestamp",
   name:        "Name",
-  email:       "Email",
+  email:       "Email Address",   // ← must match EXACTLY
   phone:       "Phone Number",
   address:     "Address",
-  date:        "Date",
-  startTime:   "Start Time",
+  date:        "Date",            // ← REQUIRED
+  startTime:   "Start Time",      // ← REQUIRED
   endTime:     "End Time",
   jobTitle:    "Job / Service",
   description: "Description",
@@ -49,75 +54,72 @@ fields: {
 }
 ```
 
-**Each value must exactly match the question text in your form.**
+5. Update each value to exactly match what `debugSheetHeaders` printed
+6. Save again
 
-To verify, run `debugFormFields()` (see below) after at least one test submission.
+### Step 4 – Test Calendar Access
 
-### Step 4 – Install the Trigger
+1. Select **`testCalendarAccess`** and click **▶ Run**
+2. Check your Google Calendar — a test event should appear for **March 11, 2026, 3–4 PM**
+3. If you get "Calendar not found": see **Troubleshooting** below
 
-1. In the Apps Script editor, select the function **`installTrigger`** from the dropdown
-2. Click **▶ Run**
-3. Approve all permission requests when prompted
-4. The trigger is now installed – every future submission will create a calendar event automatically
+### Step 5 – Test with Real Data
 
----
+1. Select **`testWithLastRow`** and click **▶ Run**
+2. This simulates a form submission using your most recent sheet row
+3. Check the calendar for the new event
 
-## Testing
+### Step 6 – Install the Live Trigger
 
-### Test event creation (no form submission needed)
-
-1. Select **`testCreateEvent`** in the function dropdown
-2. Click **▶ Run**
-3. Check your calendar – a test event should appear for `2026-03-11 15:00–16:00`
-
-### Debug field titles
-
-1. Submit the form once (or use the pre-filled test URL)
-2. Select **`debugFormFields`** and run it
-3. The **Execution log** shows every question title → answer mapping
-4. Update `CONFIG.fields` titles in `Code.gs` to match exactly
+1. Select **`installTrigger`** and click **▶ Run**
+2. Approve permissions
+3. Done — every future form submission will now auto-create a calendar event
 
 ---
 
-## Configuration Reference
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `calendarId` | *(your calendar)* | ID of the target Google Calendar |
-| `defaultDurationMinutes` | `60` | Fallback event duration when End Time is empty |
-| `sendConfirmationEmail` | `true` | Email the submitter a confirmation |
-| `confirmationEmailSubject` | `"Appointment Confirmed – D9 Calendar"` | Email subject line |
-| `organizationName` | `"D9"` | Shown in confirmation email sign-off |
-
----
-
-## Form Fields Identified
-
-| Entry ID | Field |
-|----------|-------|
-| entry.2005620554 | Name |
-| entry.1045781291 | Email |
-| entry.1166974658 | Phone Number |
-| entry.1065046570 | Address |
-| entry.1740888052 | Date (YYYY-MM-DD) |
-| entry.1388854476 | Start Time (HH:MM) |
-| entry.1473712924 | End Time (HH:MM) |
-| entry.1587085788 | Job / Service |
-| entry.323554986 | Description |
-| entry.439887738 | Equipment Needed |
-| entry.533019475 | Special Notes |
-| entry.839337160 | Additional Info |
-
----
-
-## Target Calendar
+## Calendar Access
 
 **Calendar ID:**
 ```
 be1ac89bbe6867d17b30c19680c17dabe0d9c18d4f14b05a69a647998df079c6@group.calendar.google.com
 ```
 
-Make sure the Google account running the script has **"Make changes to events"** permission on this calendar.
+The Google account running the script must have **"Make changes to events"** (Editor) permission on this calendar:
+
+1. Open **Google Calendar**
+2. Find the calendar → click ⋮ → **Settings and sharing**
+3. Under **Share with specific people**, add the script account's email with **"Make changes to events"**
+
+---
+
+## What Gets Created
+
+Each form submission creates a calendar event with:
+
+| Calendar field | Source |
+|----------------|--------|
+| Title | `Job / Service – Name` |
+| Start | Date + Start Time from form |
+| End | Date + End Time from form |
+| Location | Address |
+| Description | All form fields |
+| Guest | Submitter's email (they get a calendar invite) |
+
+A confirmation email is also sent to the submitter automatically.
+
+---
+
+## Configuration Options
+
+Edit the `CONFIG` block at the top of `Code.gs`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `calendarId` | *(your calendar)* | Target Google Calendar |
+| `defaultDurationMinutes` | `60` | Duration when End Time is missing |
+| `sendConfirmationEmail` | `true` | Email submitter after booking |
+| `confirmationEmailSubject` | `"Appointment Confirmed – D9 Calendar"` | Email subject |
+| `organizationName` | `"D9"` | Sign-off name in confirmation email |
 
 ---
 
@@ -125,11 +127,11 @@ Make sure the Google account running the script has **"Make changes to events"**
 
 | Problem | Fix |
 |---------|-----|
-| "Calendar not found" error | Share the calendar with the Google account running the script (Editor role) |
-| Fields showing as empty | Run `debugFormFields()` to see exact question titles, update `CONFIG.fields` |
-| Trigger not firing | Run `installTrigger()` again; check Triggers tab (⏱ icon) in Apps Script |
-| Permission denied | Re-run `installTrigger()` and accept all OAuth scopes |
-| Wrong timezone | Update `"timeZone"` in `appsscript.json` (e.g. `"America/New_York"`) |
+| "Calendar not found" | Share the calendar with the Apps Script account (Editor role) |
+| Fields are empty | Run `debugSheetHeaders()`, update `CONFIG.columns` to match |
+| Trigger not firing | Run `installTrigger()` again; verify in Triggers tab (⏱ icon) |
+| Wrong time on events | Change `"timeZone"` in `appsscript.json` (e.g. `"America/Chicago"`) |
+| Permission errors | Delete all triggers, re-run `installTrigger()`, re-approve all scopes |
 
 ---
 
@@ -137,7 +139,7 @@ Make sure the Google account running the script has **"Make changes to events"**
 
 ```
 D9Calendar/
-├── Code.gs           ← Main Apps Script (copy into the editor)
-├── appsscript.json   ← Project manifest with OAuth scopes & timezone
+├── Code.gs           ← Apps Script (paste into the Sheet's script editor)
+├── appsscript.json   ← Manifest with OAuth scopes and timezone
 └── README.md         ← This file
 ```
