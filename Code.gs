@@ -306,6 +306,53 @@ function testWithLastRow() {
 }
 
 /**
+ * Bulk-import: processes every existing row in the sheet and creates calendar events.
+ * Safe to re-run — rows that fail are logged and skipped, successful ones are logged.
+ * Run this ONCE from the Apps Script editor (▶ Run button).
+ */
+function importAllRows() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+        || SpreadsheetApp.openById(CONFIG.spreadsheetId);
+  var sheet = ss.getSheets()[0];
+  var allValues = sheet.getDataRange().getValues();
+
+  if (allValues.length < 2) {
+    Logger.log("No data rows found (only a header row or empty sheet).");
+    return;
+  }
+
+  var headers = allValues[0];
+  var success = 0, skipped = 0;
+
+  for (var i = 1; i < allValues.length; i++) {
+    var row = allValues[i];
+
+    // Build namedValues the same way onFormSubmit receives them
+    var namedValues = {};
+    headers.forEach(function (h, idx) {
+      namedValues[h] = [row[idx] !== undefined ? row[idx].toString() : ""];
+    });
+
+    try {
+      var data = parseNamedValues(namedValues);
+      if (!data.date) {
+        Logger.log("Row " + (i + 1) + ": skipped (no date).");
+        skipped++;
+        continue;
+      }
+      var event = createCalendarEvent(data);
+      Logger.log("Row " + (i + 1) + ": created → " + event.getTitle() + " on " + event.getStartTime());
+      success++;
+    } catch (err) {
+      Logger.log("Row " + (i + 1) + ": ERROR – " + err.message);
+      skipped++;
+    }
+  }
+
+  Logger.log("Done. Created: " + success + "  Skipped/errors: " + skipped);
+}
+
+/**
  * STEP 3 (optional): Create a test event with hardcoded data to verify calendar access.
  */
 function testCalendarAccess() {
