@@ -170,8 +170,11 @@ function buildEventDescription(data) {
   var lines = [];
   if (data.description)  lines.push(data.description);
   if (data.details)      { if (lines.length) lines.push(""); lines.push("Event Details:  " + data.details); }
-  if (data.ticketed)     lines.push("Ticketed:       " + data.ticketed);
-  if (data.ticketInfo)   lines.push("Ticket Info:    " + data.ticketInfo);
+  var isTicketed = data.ticketed && data.ticketed.toLowerCase() !== "no";
+  if (isTicketed) {
+    lines.push("Ticketed:       " + data.ticketed);
+    if (data.ticketInfo) lines.push("Ticket Info:    " + data.ticketInfo);
+  }
   if (data.eventLink)    lines.push("Event Link:     " + data.eventLink);
   if (data.notes)        lines.push("Other Comments: " + data.notes);
   return lines.join("\n");
