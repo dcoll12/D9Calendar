@@ -176,7 +176,7 @@ function buildEventDescription(data) {
     if (data.ticketInfo) lines.push("Ticket Info:    " + data.ticketInfo);
   }
   if (data.eventLink)    lines.push("Event Link:     " + data.eventLink);
-  if (data.notes)        lines.push("Other Comments: " + data.notes);
+
   return lines.join("\n");
 }
 
