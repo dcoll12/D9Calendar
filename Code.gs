@@ -46,7 +46,8 @@ var CONFIG = {
     date:        "Event Date",
     endTime:     "Event End Time",
     eventLink:   "Event Link",
-    description: "Event Description"
+    description: "Event Description",
+    title:       "Event Title"
   }
 };
 
@@ -162,26 +163,17 @@ function createCalendarEvent(data) {
 }
 
 function buildEventTitle(data) {
-  if (data.description) return data.description;
-  if (data.name)        return data.name;
-  return "New Event";
+  return data.title || "New Event";
 }
 
 function buildEventDescription(data) {
   var lines = [];
-  if (data.name)         lines.push("Contact Name:    " + data.name);
-  if (data.contactEmail) lines.push("Contact Email:   " + data.contactEmail);
-  if (data.email)        lines.push("Submitter Email: " + data.email);
-  if (data.phone)        lines.push("Phone:           " + data.phone);
-  if (data.address)      lines.push("Location:        " + data.address);
-  if (data.details)      lines.push("Event Details:   " + data.details);
-  if (data.description)  lines.push("Description:     " + data.description);
-  if (data.ticketed)     lines.push("Ticketed:        " + data.ticketed);
-  if (data.ticketInfo)   lines.push("Ticket Info:     " + data.ticketInfo);
-  if (data.eventLink)    lines.push("Event Link:      " + data.eventLink);
-  if (data.notes)        lines.push("Other Comments:  " + data.notes);
-  lines.push("");
-  lines.push("Submitted: " + (data.timestamp || new Date().toLocaleString()));
+  if (data.description)  lines.push(data.description);
+  if (data.details)      { if (lines.length) lines.push(""); lines.push("Event Details:  " + data.details); }
+  if (data.ticketed)     lines.push("Ticketed:       " + data.ticketed);
+  if (data.ticketInfo)   lines.push("Ticket Info:    " + data.ticketInfo);
+  if (data.eventLink)    lines.push("Event Link:     " + data.eventLink);
+  if (data.notes)        lines.push("Other Comments: " + data.notes);
   return lines.join("\n");
 }
 
