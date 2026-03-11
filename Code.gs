@@ -13,6 +13,9 @@ var CONFIG = {
   // Google Calendar ID to add events to
   calendarId: "be1ac89bbe6867d17b30c19680c17dabe0d9c18d4f14b05a69a647998df079c6@group.calendar.google.com",
 
+  // Form Responses spreadsheet ID (from the sheet URL)
+  spreadsheetId: "11y0aSk25N4ZWl1MZ3dgwWgTX-imHV34b0cCYaeQb4X8",
+
   // Default duration in minutes when no End Time column exists
   defaultDurationMinutes: 60,
 
@@ -59,12 +62,17 @@ function installTrigger() {
     }
   });
 
+  // Works whether script is bound to the sheet or standalone
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+        || SpreadsheetApp.openById(CONFIG.spreadsheetId);
+
   ScriptApp.newTrigger("onFormSubmit")
-    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+    .forSpreadsheet(ss)
     .onFormSubmit()
     .create();
 
-  Logger.log("Trigger installed. onFormSubmit will now fire on every new form response.");
+  Logger.log("Trigger installed on: " + ss.getName());
+  Logger.log("onFormSubmit will now fire on every new form response.");
 }
 
 // ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
@@ -267,7 +275,9 @@ function notifyAdminOfError(err, e) {
  * Prints every column header in your sheet so you can match them to CONFIG.columns.
  */
 function debugSheetHeaders() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+        || SpreadsheetApp.openById(CONFIG.spreadsheetId);
+  var sheet = ss.getSheets()[0];
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   Logger.log("=== Sheet Column Headers ===");
   headers.forEach(function (h, i) {
@@ -281,7 +291,9 @@ function debugSheetHeaders() {
  * Useful for testing without submitting the form again.
  */
 function testWithLastRow() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+        || SpreadsheetApp.openById(CONFIG.spreadsheetId);
+  var sheet = ss.getSheets()[0];
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var lastRow = sheet.getRange(sheet.getLastRow(), 1, 1, sheet.getLastColumn()).getValues()[0];
 
